@@ -1,11 +1,34 @@
 <script setup>
 import { ref } from 'vue';
+import Table from './components/Table.vue';
 
-const headers = ["To", "From", "Date", "Subject", "Cc"];
-const filter = ref(null);
-const select = ref(null);
-const searchKeyWord = ref(null);
-const entries = ref(new Array({From: "", To: "", Date: "", Subject: "", Cc: ""}, 10))
+const results = ref(5);
+const searchPhrase = ref("");
+var entries = ref([]);
+
+function fetchMails() {
+    console.log("Search phrase:", searchPhrase.value);
+    const api = `http://localhost:8080/search?q=${searchPhrase.value}`
+    fetch(api, {
+        mode: 'cors',
+        method: "get"
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        entries.value = data['hits']['hits'].map(x => {
+            return {
+                To: x["_source"]["To"],
+                From: x["_source"]["From"],
+                Date: x["_source"]["Date"],
+                Subject: x["_source"]["Subject"],
+                Cc: x["_source"]["Cc"],
+                Content: x["_source"]["Content"]
+            }
+        });
+        console.log(entries)
+    })
+    .catch(error => console.error(error))
+}
 
 </script>
 
@@ -27,7 +50,6 @@ const entries = ref(new Array({From: "", To: "", Date: "", Subject: "", Cc: ""},
             <!-- <a href="#" class="text-md no-underline text-black hover:text-blue-dark ml-2 px-1">Link1</a> -->
             <!-- <a href="#" class="text-md no-underline text-grey-darker hover:text-blue-dark ml-2 px-1">Link2</a> -->
             <!-- <a href="/two" class="text-lg no-underline text-grey-darkest hover:text-blue-dark ml-2">About Us</a> -->
-            <a href="#" class="text-md no-underline text-grey-darker hover:text-blue-dark ml-2 px-1">About</a>
             <!-- </div> -->
         </div>
     </nav>
@@ -50,10 +72,8 @@ const entries = ref(new Array({From: "", To: "", Date: "", Subject: "", Cc: ""},
 -->
 
     <!-- Table and Content -->
-    <section class="flex 2xl:flex-row xl:flex-row lg:flex-row md:flex-row-reverse sm:flex-row-reverse items-baseline p-6 font-mono w-full h-full">
-        <div class="flex-1 2xl:w-1/2 xl:w-1/2 lg:w-1/2 sm:w-full h-full"><p></p></div>
-
-        <div class="flex-2 2xl:w-1/2 xl:w-1/2 lg:w-1/2 sm:w-full mx-auto px-4 sm:px-8 h-full">
+    <section class="flex 2xl:flex-row xl:flex-row lg:flex-row md:flex-row sm:flex-row items-baseline p-6 font-mono w-full h-full">
+        <div class="2xl:w-full xl:w-full lg:w-full sm:w-full mx-auto px-4 sm:px-8 h-full">
         <div class="py-8">
             <div>
                 <h2 class="text-2xl font-semibold leading-tight">Email entries</h2>
@@ -61,26 +81,12 @@ const entries = ref(new Array({From: "", To: "", Date: "", Subject: "", Cc: ""},
             <div class="my-2 flex sm:flex-row flex-col">
                 <div class="flex flex-row mb-1 sm:mb-0">
                     <div class="relative">
-                        <select v-model="select"
+                        <select 
+                            v-model="results"
                             class="appearance-none h-full rounded-l border block appearance-none w-full bg-white border-gray-400 text-gray-700 py-2 px-4 pr-8 leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
-                            <option>5</option>
-                            <option>10</option>
-                        </select>
-                        <div
-                            class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                            <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="relative">
-                        <select
-                            v-model="filter"
-                            class="appearance-none h-full rounded-r border-t sm:rounded-r-none sm:border-r-0 border-r border-b block appearance-none w-full bg-white border-gray-400 text-gray-700 py-2 px-4 pr-8 leading-tight focus:outline-none focus:border-l focus:border-r focus:bg-white focus:border-gray-500">
-                            <option>None</option>
-                            <option v-for="header in headers">
-                                {{ header }}
-                            </option>
+                            <option value="5" >5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
                         </select>
                         <div
                             class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
@@ -99,74 +105,12 @@ const entries = ref(new Array({From: "", To: "", Date: "", Subject: "", Cc: ""},
                         </svg>
                     </span>
                     <input placeholder="Search"
-                        :value="searchKeyWord"
-                        class="appearance-none rounded-r rounded-l sm:rounded-l-none border border-gray-400 border-b block pl-8 pr-6 py-2 w-full bg-white text-sm placeholder-gray-400 text-gray-700 focus:bg-white focus:placeholder-gray-600 focus:text-gray-700 focus:outline-none" />
+                        v-model="searchPhrase"
+                        @keyup.enter="fetchMails"
+                        class="appearance-none rounded-r rounded-l sm:rounded-l-none border border-gray-400 border-b block pl-8 pr-6 py-2 w-full bg-white text-sm placeholder-gray-400 text-gray-700 focus:bg-white focus:placeholder-gray-600 focus:text-gray-700 focus:outline-none" required />
                 </div>
             </div>
-            <div class="-mx-4 sm:-mx-8 px-4 sm:px-8 py-4 overflow-x-auto">
-                <div class="inline-block min-w-full shadow rounded-lg overflow-hidden">
-                    <table class="min-w-full leading-normal">
-                        <!-- Table Header -->
-                        <thead>
-                            <tr>
-                                <th
-                                    v-for="header in headers"
-                                    class="border px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                    {{ header }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Table Rows -->
-                            <tr v-for="entry in entries.slice(select)">
-                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border">
-                                    <div class="flex items-center">
-                                        <div class="ml-3">
-                                            <p class="text-gray-900 whitespace-no-wrap">
-                                                {{  entry.To }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border">
-                                    <p class="text-gray-900 whitespace-no-wrap">{{ entry.From }}</p>
-                                </td>
-                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border">
-                                    <p class="text-gray-900 whitespace-no-wrap">
-                                        {{ entry.Date }}
-                                    </p>
-                                </td>
-                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border">
-                                    <p class="text-gray-900 whitespace-no-wrap">
-                                        {{ entry.Subject }}
-                                    </p>
-                                </td>
-                                <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border ">
-                                    <p class="text-gray-900 whitespace-no-wrap">
-                                        {{ entry.Subject }}
-                                    </p>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <div
-                        class="px-5 py-5 bg-white border-t flex flex-col xs:flex-row items-center xs:justify-between">
-                        <span class="text-xs xs:text-sm text-gray-900">
-                            Showing 1 to {{ entries.slice(select).length != 0 ? entries.slice(select).length : entries.length }} of {{ entries.length }} Entries
-                        </span>
-                        <div class="inline-flex mt-2 xs:mt-0">
-                            <button
-                                class="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-l">
-                                Prev
-                            </button>
-                            <button
-                                class="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-r">
-                                Next
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <Table :entries="entries" v-model="results"></Table>
         </div>
     </div>
     </section>

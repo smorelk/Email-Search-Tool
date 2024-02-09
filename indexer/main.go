@@ -1,17 +1,18 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/mail"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
+	"time"
 )
 
 // Constants
@@ -33,7 +34,7 @@ type MailRecord struct {
 
 func sendBatch(batch []MailRecord) error {
 	payload := make(map[string]any)
-	payload["index"] = "enron_mail"
+	payload["index"] = "mails"
 	payload["records"] = batch
 
 	jsonPayload, err := json.Marshal(payload)
@@ -77,66 +78,60 @@ func main() {
 	}
 	defer pprof.StopCPUProfile()
 
-	tgzFile, err := os.Open(os.Args[1])
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	gz, err := gzip.NewReader(tgzFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tarArchive := tar.NewReader(gz)
 	batch := make([]MailRecord, 0, batchSize)
 	sent := 0
+	start := time.Now()
 
-	for {
-		h, err := tarArchive.Next()
+	fmt.Println("Indexing started...")
+	fmt.Println("Collection CPU profile...")
 
-		// End-of-file
-		if err == io.EOF {
-			break
-		}
-
+	err = filepath.WalkDir(os.Args[1], func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
-		switch h.Typeflag {
-		// If regular file, parse it and add it to current batch.
-		case tar.TypeReg:
-			msg, err := mail.ReadMessage(tarArchive)
+		if !d.IsDir() {
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+
+			msg, err := mail.ReadMessage(f)
 			if err != nil {
 				// Malformed header errors may occur, skip those.
-				continue
+				return nil
 			}
 			content, err := io.ReadAll(msg.Body)
 			if err != nil {
 				log.Fatal(err)
 			}
+
 			mr := MailRecord{
 				To:      msg.Header["To"],
 				From:    msg.Header.Get("From"),
 				Date:    msg.Header.Get("Date"),
 				Subject: msg.Header.Get("Subject"),
 				Cc:      msg.Header["Cc"],
-				Content: string(content)}
+				Content: string(content),
+			}
+
 			batch = append(batch, mr)
 			if len(batch) == batchSize {
 				if err = sendBatch(batch); err != nil {
-					log.Fatal(err)
+					return err
 				}
 				// Clear current batch to make room for next.
 				sent += len(batch)
 				batch = nil
 			}
-
-		default:
-			// Not a file, skip.
-			continue
 		}
 
+		return nil
+	})
+
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// Batch might have remaining records at this point,
@@ -147,4 +142,6 @@ func main() {
 	sent += len(batch)
 
 	fmt.Println("Emails processed:", sent)
+	fmt.Println("CPU Profile output:", f.Name())
+	fmt.Println("Time elapsed:", time.Since(start).Seconds(), "seconds")
 }
