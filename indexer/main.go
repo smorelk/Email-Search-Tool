@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -22,6 +23,9 @@ const (
 	batchSize = 1000 // Emails batch size
 	api       = "http://localhost:4080/api/_bulkv2"
 )
+
+var mailDir = flag.String("maildir", ".", "Mail directory to index")
+var cpuProf = flag.String("prof", "cpu.prof", "CPU profile output file")
 
 type MailRecord struct {
 	To      []string
@@ -63,12 +67,16 @@ func sendBatch(batch []MailRecord) error {
 }
 
 func main() {
-	if len(os.Args[1:]) == 0 {
-		panic("usage: indexer <email directory>")
+	flag.Parse()
+
+	if flag.NFlag() == 0 {
+		fmt.Fprintf(os.Stderr, "Usage: indexer -maildir <dir> -prof <cpu.prof>\n")
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 
 	// Set-up CPU profiling
-	f, err := os.Create("cpu.prof")
+	f, err := os.Create(*cpuProf)
 	if err != nil {
 		panic(err)
 	}
@@ -83,9 +91,9 @@ func main() {
 	start := time.Now()
 
 	fmt.Println("Indexing started...")
-	fmt.Println("Collection CPU profile...")
+	fmt.Println("Collecting CPU profile...")
 
-	err = filepath.WalkDir(os.Args[1], func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(*mailDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
