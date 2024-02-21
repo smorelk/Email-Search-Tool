@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"net/http"
-	"net/mail"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/pprof"
+	"strings"
 	"time"
 )
 
@@ -27,13 +27,49 @@ const (
 var mailDir = flag.String("maildir", ".", "Mail directory to index")
 var cpuProf = flag.String("prof", "cpu.prof", "CPU profile output file")
 
+// Regexp patterns
+var msg = regexp.MustCompile("Message-ID:.*")
+var to = regexp.MustCompile(`To:.*`)
+var from = regexp.MustCompile(`From:.*`)
+var date = regexp.MustCompile(`Date:.*`)
+var subj = regexp.MustCompile(`Subject:.*`)
+var endHeader = regexp.MustCompile(`\r\n\r\n`)
+
 type MailRecord struct {
-	To      []string
-	From    string
-	Date    string
-	Subject string
-	Cc      []string
-	Content string
+	MessageID string
+	To        []string
+	From      string
+	Date      string
+	Subject   string
+	Content   string
+}
+
+// Parse file bytes into a MailRecord
+func parse(data string) MailRecord {
+	// If there is not message ID in data,
+	// skip because there is no email data
+	// to parse.
+	if !msg.MatchString(data) {
+		return MailRecord{}
+	}
+
+	cLoc := endHeader.FindStringIndex(data)
+	msg_ := msg.FindString(data)
+	to_ := strings.Split(to.FindString(data), ",")
+	to_[0] = strings.Replace(to_[0], "To:", "", 1)
+	to_[len(to_)-1] = strings.ReplaceAll(to_[len(to_)-1], ",", "")
+	from_ := from.FindString(data)
+	date_ := date.FindString(data)
+	subj_ := subj.FindString(data)
+
+	return MailRecord{
+		MessageID: strings.Replace(msg_, "Message-ID:", "", 1),
+		To:        to_,
+		From:      strings.Replace(from_, "From:", "", 1),
+		Date:      strings.Replace(date_, "Date:", "", 1),
+		Subject:   strings.Replace(subj_, "Subject:", "", 1),
+		Content:   data[cLoc[0]:],
+	}
 }
 
 func sendBatch(batch []MailRecord) error {
@@ -87,7 +123,6 @@ func main() {
 	defer pprof.StopCPUProfile()
 
 	batch := make([]MailRecord, 0, batchSize)
-	sent := 0
 	start := time.Now()
 
 	fmt.Println("Indexing started...")
@@ -99,40 +134,22 @@ func main() {
 		}
 
 		if !d.IsDir() {
-			f, err := os.Open(path)
+			fbytes, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
 
-			msg, err := mail.ReadMessage(f)
-			if err != nil {
-				// Malformed header errors may occur, skip those.
-				return nil
-			}
-			content, err := io.ReadAll(msg.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			mr := MailRecord{
-				To:      msg.Header["To"],
-				From:    msg.Header.Get("From"),
-				Date:    msg.Header.Get("Date"),
-				Subject: msg.Header.Get("Subject"),
-				Cc:      msg.Header["Cc"],
-				Content: string(content),
-			}
-
+			mr := parse(string(fbytes))
 			batch = append(batch, mr)
 			if len(batch) == batchSize {
-				if err = sendBatch(batch); err != nil {
-					return err
+				if err := sendBatch(batch); err != nil {
+					log.Fatal(err)
 				}
-				// Clear current batch to make room for next.
-				sent += len(batch)
+
 				batch = nil
+				batch = make([]MailRecord, 0, batchSize)
 			}
+
 		}
 
 		return nil
@@ -147,9 +164,8 @@ func main() {
 	if err = sendBatch(batch); err != nil {
 		log.Fatal(err)
 	}
-	sent += len(batch)
 
-	fmt.Println("Emails processed:", sent)
+	fmt.Println("Indexing Finished.")
 	fmt.Println("CPU Profile output:", f.Name())
 	fmt.Println("Time elapsed:", time.Since(start).Seconds(), "seconds")
 }
