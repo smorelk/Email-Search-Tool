@@ -3,24 +3,14 @@ import { reactive, ref, toRaw } from 'vue';
 import Dialog from './Dialog.vue'
 
 const props = defineProps(['entries']);
-const headers = ["To", "From", "Date", "Subject", "Cc", "View"];
-const showEntry = ref({});
-const hidden = ref(false);
-
-const start = ref(0);
-const end = defineModel();
-let currentPage = 1;
+const headers = ["To", "From", "Date", "Subject", "View"];
+const selectedEntry = ref({});
+const show = ref(false);
+const boundaries = defineModel();
 
 function showEntryContent(entry) {
-    showEntry.value = toRaw(entry);
-    hidden.value = true;
-}
-
-function setPrevPage() {
-
-}
-
-function setNextPage() {
+    selectedEntry.value = toRaw(entry);
+    show.value = true;
 }
 
 </script>
@@ -41,10 +31,10 @@ function setNextPage() {
                 </thead>
                     <tbody>
                        <!-- Table Rows -->
-                       <tr v-for="entry in props.entries.slice(start, end)">
+                       <tr v-for="entry in props.entries.slice(boundaries.start, boundaries.end)">
                                 <td class="p-5 border-b border-gray-200 bg-white text-sm border text-balance">
                                    <p v-for="mail in entry.To" class="text-gray-900">
-                                        {{  mail }},
+                                        {{ mail }}
                                     </p>
                                 </td>
                                 <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border">
@@ -60,11 +50,6 @@ function setNextPage() {
                                         {{ entry.Subject }}
                                     </p>
                                 </td>
-                                <td class="p-5 border-b border-gray-200 bg-white text-sm border text-balance">
-                                    <p v-for="mail in entry.Cc" class="text-gray-900">
-                                        {{  mail }},
-                                    </p>
-                                </td>
                                 <td class="px-5 py-5 border-b border-gray-200 bg-white text-sm border">
                                     <button @click="showEntryContent(entry)" class="bg-grey-light hover:bg-grey text-grey-darkest font-bold py-2 px-4 rounded inline-flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
@@ -76,27 +61,9 @@ function setNextPage() {
                             </tr>
                         </tbody>
                     </table>
-                    <div
-                        class="px-5 py-5 bg-white border-t flex flex-col xs:flex-row items-center xs:justify-between">
-                        <span class="text-xs xs:text-sm text-gray-900">
-                            Showing {{ start }} to {{ end * currentPage}} of {{ props.entries.length }} Entries
-                        </span>
-                        <div class="inline-flex mt-2 xs:mt-0">
-                            <button
-                                @click="setPrevPage"
-                                class="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-l">
-                                Prev
-                            </button>
-                            <button
-                                @click="setNextPage"
-                                class="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-r">
-                                Next
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </div>
 
     <!-- Dialog for the content -->
-    <Dialog :hidden="hidden" :entry="showEntry"></Dialog>
+    <Dialog v-model="show" :entry="selectedEntry"></Dialog>
 </template>

@@ -1,10 +1,18 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, reactive } from 'vue';
 import Table from './components/Table.vue';
 
+// Reactive fields
 const results = ref(5);
 const searchPhrase = ref("");
+const currentPage = ref(1);
+const boundariesState = reactive({
+    start: results.value * (currentPage.value-1),
+    end: results.value * currentPage.value
+})
+
 var entries = ref([]);
+var pages = 0;
 
 function fetchMails() {
     console.log("Search phrase:", searchPhrase.value);
@@ -15,21 +23,41 @@ function fetchMails() {
     })
     .then(resp => resp.json())
     .then(data => {
-        entries.value = data['hits']['hits'].map(x => {
-            return {
-                To: x["_source"]["To"],
-                From: x["_source"]["From"],
-                Date: x["_source"]["Date"],
-                Subject: x["_source"]["Subject"],
-                Cc: x["_source"]["Cc"],
-                Content: x["_source"]["Content"]
-            }
-        });
-        console.log(entries)
+        var d = data['hits']['hits'].map(x => x['_source'])
+        entries.value = d;
     })
     .catch(error => console.error(error))
+
+    // Get the initial pages count. This value may change later. See 'setPages'.
+    pages = Math.ceil(entries.length / results.value);
 }
 
+function updateBoundaries() {
+    boundariesState.start = (results.value * (currentPage.value-1));
+    boundariesState.end = results.value * currentPage.value;
+}
+
+// Binded with select's onChange function.
+function setPages() {
+    // Since the results per page change, set the pages accordantly.
+    pages = Math.ceil(entries.length / results.value);
+    updateBoundaries();
+}
+
+function setNextPage() {
+    currentPage.value++;
+    if (currentPage.value > pages) {
+        currentPage.value = pages;
+    }
+    updateBoundaries();
+}
+
+function setPrevPage() {
+    currentPage.value--;
+    if (currentPage.value == 0)
+        currentPage.value = 1;
+    updateBoundaries();
+}
 </script>
 
 <template>
@@ -83,6 +111,7 @@ function fetchMails() {
                     <div class="relative">
                         <select 
                             v-model="results"
+                            @change="setPages"
                             class="appearance-none h-full rounded-l border block appearance-none w-full bg-white border-gray-400 text-gray-700 py-2 px-4 pr-8 leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
                             <option value="5" >5</option>
                             <option value="10">10</option>
@@ -110,7 +139,25 @@ function fetchMails() {
                         class="appearance-none rounded-r rounded-l sm:rounded-l-none border border-gray-400 border-b block pl-8 pr-6 py-2 w-full bg-white text-sm placeholder-gray-400 text-gray-700 focus:bg-white focus:placeholder-gray-600 focus:text-gray-700 focus:outline-none" required />
                 </div>
             </div>
-            <Table :entries="entries" v-model="results"></Table>
+            <Table :entries="entries" v-model="boundariesState"></Table>
+            <div
+               class="px-5 py-5 bg-white border-t flex flex-col xs:flex-row items-center xs:justify-between">
+                <span class="text-xs xs:text-sm text-gray-900">
+                    Showing {{ boundariesState.start }} to {{ boundariesState.end-1 }} of {{ entries.length }} Entries
+                </span>
+                <div class="inline-flex mt-2 xs:mt-0">
+                    <button
+                        @click="setPrevPage"
+                        class="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-l">
+                        Prev
+                    </button>
+                    <button
+                        @click="setNextPage"
+                        class="text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-r">
+                         Next
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
     </section>
